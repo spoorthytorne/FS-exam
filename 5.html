@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Race Application</title>
+    <script src="https://unpkg.com/react/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/babel-standalone/babel.min.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+      // Define the Athlete class
+      class Athlete {
+        constructor(name, time) {
+          this.name = name;
+          this.time = time;
+        }
+      }
+
+      // Define the RaceApp component
+      class RaceApp extends React.Component {
+        constructor(props) {
+          super(props);
+          this.state = {
+            athletes: [],
+            winner: null,
+          };
+        }
+
+        handleInputChange = (event, index) => {
+          const athletes = [...this.state.athletes];
+          athletes[index] = {
+            ...athletes[index],
+            [event.target.name]: event.target.value,
+          };
+          this.setState({ athletes });
+        };
+
+        addAthlete = () => {
+          const { athletes } = this.state;
+          const newAthlete = { name: "", time: "" };
+
+          athletes.push(newAthlete);
+          this.setState({ athletes });
+        };
+
+        removeAthlete = (index) => {
+          const athletes = [...this.state.athletes];
+          athletes.splice(index, 1);
+          this.setState({ athletes });
+        };
+
+        saveAthletes = () => {
+          const { athletes } = this.state;
+
+          Promise.all(
+            athletes.map((athlete) =>
+              fetch('/api/athletes', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ athlete }),
+              })
+            )
+          )
+            .then((responses) => Promise.all(responses.map((res) => res.json())))
+            .then((data) => {
+              console.log(data);
+              this.setState({ athletes: [], winner: null });
+            })
+            .catch((error) => {
+              console.error('Error storing athletes:', error);
+            });
+        };
+
+        calculateWinner = () => {
+          const { athletes } = this.state;
+          let fastestTime = Number.POSITIVE_INFINITY;
+          let winner;
+
+          for (let athlete of athletes) {
+            if (athlete.time < fastestTime) {
+              fastestTime = athlete.time;
+              winner = athlete;
+            }
+          }
+
+          this.setState({ winner });
+        };
+
+        render() {
+          const { athletes, winner } = this.state;
+
+          return (
+            <div>
+              <h2>Race Information</h2>
+
+              {athletes.map((athlete, index) => (
+                <div key={index}>
+                  <label>Athlete's Name:</label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={athlete.name}
+                    onChange={(event) => this.handleInputChange(event, index)}
+                  />
+
+                  <label>Time Taken (in seconds):</label>
+                  <input
+                    type="number"
+                    name="time"
+                    value={athlete.time}
+                    onChange={(event) => this.handleInputChange(event, index)}
+                  />
+
+                  <button onClick={() => this.removeAthlete(index)}>Remove</button>
+                </div>
+              ))}
+
+              <button onClick={this.addAthlete}>Add Athlete</button>
+
+              <button onClick={this.saveAthletes}>Save Athletes</button>
+
+              <button onClick={this.calculateWinner}>Calculate Winner</button>
+
+              {winner && (
+                <p>
+                  The winner is {winner.name} with a time of {winner.time} seconds.
+                </p>
+              )}
+            </div>
+          );
+        }
+      }
+
+      // Render the RaceApp component to the DOM
+      ReactDOM.render(<RaceApp />, document.getElementById("root"));
+    </script>
+
+    <script>
+      const express = require('express');
+      const MongoClient = require('mongodb').MongoClient;
+
+      const app = express();
+      const port = 3001;
+
+      // MongoDB connection URL
+      const url = 'mongodb+srv://spoorthyt:mongodb@cluster0.mjpr7sm.mongodb.net/?retryWrites=true&w=majority';
+      // MongoDB database name
+      const dbName = 'athletesDB';
+
+      // Middleware to parse request body as JSON
+      app.use(express.json());
+
+      // Endpoint to handle athlete data storage
+      app.post('/api/athletes', (req, res) => {
+        const athlete = req.body.athlete;
+
+        MongoClient.connect(url, (err, client) => {
+          if (err) {
+            console.error('Error connecting to MongoDB:', err);
+            res.status(500).json({ error: 'Failed to connect to the database' });
+            return;
+          }
+
+          const db = client.db(dbName);
+          const collection = db.collection('athletes');
+
+          collection.insertOne(athlete, (err, result) => {
+            if (err) {
+              console.error('Error inserting athlete into MongoDB:', err);
+              res.status(500).json({ error: 'Failed to insert athlete into the database' });
+              return;
+            }
+
+            res.json({ message: 'Athlete stored in the database' });
+          });
+
+          client.close();
+        });
+      });
+
+      app.listen(port, () => {
+        console.log(`Server running on port ${port}`);
+      });
+    </script>
+  </body>
+</html>
